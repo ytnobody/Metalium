@@ -3,7 +3,7 @@ use strict;
 use warnings;
 use Test::TCP;
 use Metalium;
-use Cache::Memmcached::Fast;
+use Cache::Memcached::Fast;
 use Exporter 'import';
 our @EXPORT = qw[ test_server ];
 
@@ -13,7 +13,7 @@ sub test_server {
         my $port = shift;
         my $sv = Metalium->new( open => [[ 0, $port ]] );
         if ( %procs ) {
-            $sv->add_procedure( $_ ) for keys %procs;
+            $sv->add_procedure( $_ => $procs{$_} ) for keys %procs;
         }
         $sv->run;
     });

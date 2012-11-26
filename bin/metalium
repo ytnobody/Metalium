@@ -1,0 +1,46 @@
+#!/usr/bin/env perl
+
+use warnings;
+use strict;
+use Getopt::Long;
+use Metalium;
+
+my $addr = 0;
+my $port = 2012;
+my $proc_library;
+
+my $result = GetOptions( 
+    "addr=i" => \$addr, 
+    "port=i" => \$port,
+    "library=s" => \$proc_library,
+);
+
+sub VERSION_MESSAGE {
+    printf <<EOF, $Metalium::VERSION;
+metalium version %s
+
+Usage
+ metalium [options] 
+
+ options
+  -a(--addr) bind_address (default=0.0.0.0)
+  -p(--port) port(default=2012)
+  -l(--library) procedure_file
+
+You can see more information with "perldoc Metalium". 
+
+EOF
+    exit;
+}
+
+VERSION_MESSAGE() unless $result;
+
+my $metalium = Metalium->new( open => [ [ $addr, $port ] ] );
+
+if ( $proc_library ) {
+    my %procs = do( $proc_library );
+    $metalium->add_procedure( $_ => $procs{$_} ) for keys %procs;
+}
+
+$metalium->run;
+

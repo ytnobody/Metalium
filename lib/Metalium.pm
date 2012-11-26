@@ -7,9 +7,9 @@ use JSON;
 use AE;
 use Try::Tiny;
 
-our $DATA = {};
-our $PROCEDURE = {};
-our $PARSER = JSON->new->utf8(1);
+my $data = {};
+my $procedure = {};
+my $parser = JSON->new->utf8(1);
 
 sub new {
     my ( $class, %opts ) = @_;
@@ -27,14 +27,17 @@ sub run {
 
 sub add_procedure {
     my ( $self, $name, $code ) = @_;
-    $PROCEDURE->{$name} = $code;
+    $procedure->{$name} = $code;
 }
 
+use Data::Dumper;
 sub call_procedure {
-    my ( $proc_name, $data ) = @_;
-    my $proc = $PROCEDURE->{$proc_name};
+    my ( $proc_name, $key ) = @_;
+    my $proc = $procedure->{$proc_name};
     return try {
-        ( 1, $proc->( $data ) );
+        local $_ = $data->{$key}{data};
+        $data->{$key}{data} = $proc->();
+        ( 1, $data->{$key} );
     } catch {
         warn "Error in procedure $proc_name: ". $_;
         ( 0, undef );
@@ -42,14 +45,15 @@ sub call_procedure {
 }
 
 sub set {
-    my ( $cb, $key, $flag, $expire, $data ) = @_;
-    if ( my ( $proc_name ) = $DATA->{$key} =~ /^call (.+)$/  ) {
-        return call_procedure( $proc_name, $DATA->{$key} );
+    my ( $cb, $key, $flag, $expire, $param ) = @_;
+    $expire ||= 30;
+    if ( my ( $proc_name ) = $key =~ /^call:(.+)$/  ) {
+        return call_procedure( $proc_name, $param );
     }
     else {
-        $DATA->{$key} = { 
-            data => try { $PARSER->decode( $data ) } catch { $data },
-            expire => $expire ? time + $expire : 0,
+        $data->{$key} = { 
+            limit  => time() + $expire,
+            data   => try { $parser->decode( $param ) } catch { $param },
         };
         return $cb->(1);
     }
@@ -57,20 +61,26 @@ sub set {
 
 sub get {
     my ( $cb, $key ) = @_;
-    if ( $DATA->{$key} ) {
-        delete $DATA->{$key} if $DATA->{$key}{expire} <= time;
+    if ( $data->{$key} ) {
+        delete $data->{$key} if $data->{$key}{limit} <= time;
     }
-    return $cb->( 0 ) unless exists $DATA->{$key};
-    my $data = ref $DATA->{$key}{data} =~ /^(ARRAY|HASH)$/ ? 
-        $PARSER->encode( $DATA->{$key}{data} ) : 
-        $DATA->{$key}{data} 
+    return $cb->( 0 ) unless exists $data->{$key};
+    my $data = ref $data->{$key}{data} =~ /^(ARRAY|HASH)$/ ? 
+        $parser->encode( $data->{$key}{data} ) : 
+        $data->{$key}{data} 
     ;
     return $cb->( 1, $data );
 }
 
 sub delete {
     my ( $cb, $key ) = @_;
-    delete $DATA->{$key};
+    delete $data->{$key};
+    $cb->( 1 );
+}
+
+sub flush_all {
+    my ( $cb ) = @_;
+    $data = {};
     $cb->( 1 );
 }
 
